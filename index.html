@@ -1,0 +1,591 @@
+a<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cesium 九頭竜川 CIM </title>
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.89/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.89/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+
+  <style>
+    html, body, #cesiumContainer {
+      width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden;
+    }
+
+#treeToggle {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 110;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  user-select: none;
+  box-shadow: 0 0 5px rgba(0,0,0,0.2);
+  opacity: 0.5;
+}
+
+
+#treeContainer {
+  position: absolute;
+  top: 40px; 
+  left: 10px;
+  width: 300px; 
+  max-height: 90%;
+  overflow-y: auto;
+  background: rgba(255, 255, 255, 0.9);
+  opacity: 0.8;
+  padding: 10px;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.3);
+  z-index: 100;
+}
+
+    .label {
+      background: white;
+      padding: 2px 4px;
+      border-radius: 3px;
+      font-weight: bold;
+      cursor: pointer;
+      user-select: none;
+    }
+.iframe-popup {
+  position: absolute;
+  top: 50px;
+  right: 10px;
+  width: 700px; 
+  height: 600px;
+  border: 2px solid #333;
+  background: #fff;
+  z-index: 200;
+  box-sizing: border-box;
+  padding: 0; 
+overflow: hidden;
+
+}
+
+#iframeFrame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  box-sizing: border-box;
+  display: block; 
+  margin: 0; 
+  padding: 0;
+}
+
+    .iframe-popup-header {
+      background: #eee;
+      font-weight: bold;
+      padding: 5px;
+    }
+
+    #mainTitle {
+      position: absolute;
+      top: 50px;
+      right:-90px;
+      transform: translateX(-50%);
+      font-size: 1em;
+      font-weight: bold;
+      background: rgba(255, 255, 255, 0.85);
+  opacity: 0.5;
+      padding: 6px 12px;
+      border-radius: 8px;
+      box-shadow: 0 0 5px rgba(0,0,0,0.2);
+      z-index: 120;
+      user-select: none;
+color: black;
+    }
+
+#clientLogo {
+  position: absolute;
+  bottom: 10px;
+  right: 40px;
+  width: 150px; /* 小さめサイズ */
+  opacity: 0.5;  /* 透かし度 */
+  pointer-events: none; 
+  z-index: 130;  
+}
+.tree-parent::before {
+  content: '▶ ';
+  display: inline-block;
+  transform: rotate(0deg);
+  transition: transform 0.2s ease;
+}
+
+.tree-parent.expanded::before {
+  transform: rotate(90deg);
+}
+
+.tree-children {
+  display: none;
+  margin-left: 1em;
+}
+
+.tree-children.visible {
+  display: block;
+}
+
+  </style>
+</head>
+<body>
+  <script>
+    const PASSWORD = "idea123"; 
+    const userInput = prompt("パスワードを入力してください:");
+    if (userInput !== PASSWORD) {
+      alert("パスワードが違います。");
+      location.reload();
+    }
+  </script>
+  <div id="cesiumContainer"></div>
+<div id="treeToggle" style="position:absolute; top:10px; left:10px; z-index:110; background:#eee; border-radius:4px; padding:5px; cursor:pointer; user-select:none;">   ツリー非表示 ▲ </div>
+  <div id="treeContainer"></div>
+  <div id="popupContainer" class="iframe-popup" style="display:none">
+    <div id="popupHeader" class="iframe-popup-header">
+      <span id="popupTitle" style="float:left;"></span>
+      <button id="popupClose" style="float:right;">×</button>
+    </div>
+    <iframe id="popupFrame" width="100%" height="100%" frameborder="0"></iframe>
+  </div>
+  <script>
+    window.addEventListener('DOMContentLoaded', () => {
+     
+const treeToggle = document.getElementById('treeToggle');
+
+
+treeToggle.textContent = 'ツリー非表示 ▲';
+
+treeToggle.addEventListener('click', () => {
+  if (treeContainer.style.display === 'none') {
+    treeContainer.style.display = 'block';
+    treeToggle.textContent = 'ツリー非表示 ▲';
+  } else {
+    treeContainer.style.display = 'none';
+    treeToggle.textContent = 'ツリー表示 ▼';
+  }
+});
+
+
+
+ Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJhZDE3MjMyZi01MThlLTQxOGQtOTM4ZC1iYjBlODFiMGM2Y2UiLCJpZCI6MjQ1NzQ4LCJpYXQiOjE3Mjc5NzY3ODJ9.pNoxj3_erzKOuSjKyj2A_LQXESK_jk9hg692mvX_3G0';
+
+      const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrainProvider: Cesium.createWorldTerrain(),
+        timeline: false,
+        animation: false
+      });
+
+
+// 追加：水面タイル3303831の読み込みと動画テクスチャ平面追加
+
+let waterTileset = null;
+let videoElement = null;
+let videoMaterial = null;
+let videoPrimitive = null;
+
+Cesium.IonResource.fromAssetId(3303831).then(resource => {
+  waterTileset = new Cesium.Cesium3DTileset({ url: resource });
+  viewer.scene.primitives.add(waterTileset);
+
+  waterTileset.readyPromise.then(() => {
+    // 水面タイルの中心座標から高さを取得
+    const center = waterTileset.boundingSphere.center;
+    const cartographic = Cesium.Cartographic.fromCartesian(center);
+    const height = cartographic.height;
+
+
+// 動画要素の作成
+videoElement = document.createElement('video');
+videoElement.src = 'https://cesium.com/downloads/cesiumjs/releases/1.89/Apps/SampleData/sea.mp4';
+videoElement.loop = true;
+videoElement.muted = true;
+videoElement.playsInline = true;
+videoElement.crossOrigin = "anonymous";
+
+// 動画読み込み完了時に再生＆マテリアル作成＆平面追加を実施
+videoElement.addEventListener('canplay', () => {
+  videoElement.play().catch((e) => {
+    console.warn('動画再生に失敗:', e);
+  });
+
+  // 動画マテリアルの作成（再生開始後に）
+  videoMaterial = new Cesium.Material({
+    fabric: {
+      type: 'Image',
+      uniforms: {
+        image: videoElement
+      }
+    }
+  });
+
+  // 動画平面の作成（ここでprimitive追加）
+  videoPrimitive = viewer.scene.primitives.add(new Cesium.Primitive({
+    geometryInstances: new Cesium.GeometryInstance({
+      geometry: new Cesium.RectangleGeometry({
+        rectangle: Cesium.Rectangle.fromDegrees(
+          Cesium.Math.toDegrees(cartographic.longitude) - 0.1,
+          Cesium.Math.toDegrees(cartographic.latitude) - 0.05,
+          Cesium.Math.toDegrees(cartographic.longitude) + 0.1,
+          Cesium.Math.toDegrees(cartographic.latitude) + 0.05,
+          height
+        ),
+        vertexFormat: Cesium.VertexFormat.POSITION_AND_ST
+      }),
+      id: 'videoPlane'
+    }),
+    appearance: new Cesium.MaterialAppearance({
+      material: videoMaterial,
+      translucent: true,
+      flat: true,
+      faceForward: true
+    }),
+    asynchronous: true
+  }));
+
+  // 毎フレーム動画のテクスチャを更新
+  viewer.scene.preUpdate.addEventListener(() => {
+    if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA && !videoElement.paused) {
+      viewer.scene.requestRender();
+    }
+  });
+});
+
+
+// 動画平面の作成
+videoPrimitive = viewer.scene.primitives.add(new Cesium.Primitive({
+  geometryInstances: new Cesium.GeometryInstance({
+    geometry: new Cesium.RectangleGeometry({
+      rectangle: Cesium.Rectangle.fromDegrees(
+        Cesium.Math.toDegrees(cartographic.longitude) - 0.1,
+        Cesium.Math.toDegrees(cartographic.latitude) - 0.05,
+        Cesium.Math.toDegrees(cartographic.longitude) + 0.1,
+        Cesium.Math.toDegrees(cartographic.latitude) + 0.05,
+        height
+      ),
+      vertexFormat: Cesium.VertexFormat.POSITION_AND_ST
+    }),
+    id: 'videoPlane'
+  }),
+  appearance: new Cesium.MaterialAppearance({
+    material: videoMaterial,
+    translucent: true,
+    flat: true,
+    faceForward: true
+  }),
+  asynchronous: true
+}));
+
+// 毎フレーム動画のテクスチャを更新
+viewer.scene.preUpdate.addEventListener(() => {
+  if (videoElement.readyState >= videoElement.HAVE_CURRENT_DATA && !videoElement.paused) {
+    viewer.scene.requestRender();
+  }
+});
+
+
+  });
+});
+
+
+let pointCloudTileset = null;
+
+
+const mainModels = [
+  {
+    id: 3455545,
+    title: '3Dモデル',
+    detail: 'Navisworks-ダウンロード',
+    label: '3Dモデル',
+    url: 'https://ideacon.ent.box.com/embed/s/pw5g3fx9jp8j91r9nzyipe0wbs5ch0dv/folder/325520725373'
+  },
+  {
+    id: 3456029,
+    title: '警報局舎 18 勝原',
+    detail: 'ダム下流巡視記録-PDF閲覧',
+    label: '警報局舎 18 勝原',
+    url: 'https://ideacon.ent.box.com/embed/s/ipk7viw5rtro5qt6yg3xr6o6w6nun553/folder/324655414834'
+  },
+  {
+    id: 3455598,
+    title: '※2 No.24付近林谷橋上流',
+    detail: '湖面巡視記録-PDF閲覧',
+    label: '※2 湖面巡視',
+    url: 'https://ideacon.ent.box.com/embed/s/4uiej0s06h2zhxr0gc0e6zfbc8nckf1y/folder/324645690877'
+  }
+];
+
+
+const labelEntities = []; 
+
+
+Cesium.IonResource.fromAssetId(3300958).then(resource => {
+  pointCloudTileset = new Cesium.Cesium3DTileset({ url: resource });
+  viewer.scene.primitives.add(pointCloudTileset);
+
+pointCloudTileset.readyPromise.then(() => {
+  viewer.camera.flyToBoundingSphere(
+    pointCloudTileset.boundingSphere,
+    {
+      offset: new Cesium.HeadingPitchRange(
+        Cesium.Math.toRadians(-5),   // heading: 東から
+        Cesium.Math.toRadians(-5.5),  // pitch: 上空から見下ろす
+        pointCloudTileset.boundingSphere.radius * 1.35 // やや引き
+      ),
+      duration: 2
+    }
+  );
+});
+
+});
+
+
+
+mainModels.forEach(model => {
+  Cesium.IonResource.fromAssetId(model.id).then(resource => {
+    const tileset = new Cesium.Cesium3DTileset({ url: resource });
+    viewer.scene.primitives.add(tileset);
+
+    tileset.readyPromise.then(() => {
+      viewer.zoomTo(tileset);
+
+      const bounding = tileset.boundingSphere.center;
+
+      // ラベル色を判別して設定
+      let labelColor = Cesium.Color.BLACK;
+      if (model.label.includes('警報局舎')) {
+        labelColor = Cesium.Color.RED;  // 警報局舎は赤
+      } else if (model.label.includes('湖面巡視')) {
+        labelColor = Cesium.Color.BLUE; // 湖面巡視は青
+      }
+
+      const labelEntity = viewer.entities.add({
+        position: bounding,
+        label: {
+          text: model.label,
+          font: '12px sans-serif',
+          fillColor: labelColor,
+          outlineColor: Cesium.Color.WHITE,
+          outlineWidth: 2,
+          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+          pixelOffset: new Cesium.Cartesian2(0, -30),
+          backgroundColor: Cesium.Color.WHITE.withAlpha(0.7),
+          backgroundPadding: new Cesium.Cartesian2(8, 6),
+          showBackground: true
+        }
+      });
+
+      labelEntities.push({ entity: labelEntity, model }); 
+    });
+  });
+});
+
+
+
+const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+
+handler.setInputAction((click) => {
+  const pickedObject = viewer.scene.pick(click.position);
+  if (Cesium.defined(pickedObject)) {
+
+    const found = labelEntities.find(item => item.entity === pickedObject.id);
+    if (found) {
+      const model = found.model;
+      showPopup(model.title, model.url, model.detail);
+    }
+  }
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+
+
+      function hidePopup() {
+        document.getElementById('popupContainer').style.display = 'none';
+        document.getElementById('popupFrame').src = 'about:blank';
+      }
+      function showPopup(title, url, detail = '') {
+  document.getElementById('popupContainer').style.display = 'block';
+  document.getElementById('popupTitle').innerHTML = `
+    <div style="font-size: 20px;">${title}</div>
+    <div style="font-size: 14px; color: #555;">${detail}</div>
+  `;
+  document.getElementById('popupFrame').src = url;
+}
+
+      const treeContainer = document.getElementById('treeContainer');
+treeContainer.style.display = 'none';
+
+      const globeCheckbox = document.createElement('input');
+      globeCheckbox.type = 'checkbox';
+      globeCheckbox.checked = true;
+      globeCheckbox.id = 'globeToggle';
+
+      const globeLabel = document.createElement('label');
+      globeLabel.htmlFor = 'globeToggle';
+      globeLabel.innerText = '地球儀表示';
+
+      const globeDiv = document.createElement('div');
+      globeDiv.style.marginBottom = '8px';
+      globeDiv.appendChild(globeCheckbox);
+      globeDiv.appendChild(globeLabel);
+
+      treeContainer.insertBefore(globeDiv, treeContainer.firstChild);
+
+      globeCheckbox.addEventListener('change', () => {
+        viewer.scene.globe.show = globeCheckbox.checked;
+      });
+
+
+      const treeData = [
+        { name: '建物 OSD', id: 2602291 },
+        { name: '点群（近赤外線オリジナル_年月日）', id: 3300958 },
+        {
+          name: '地形', children: [
+            { name: '統合地形', id: 3296866 },
+            { name: '地形（例：ALB_年月日）', id: 3308455 },
+            { name: '現況地形 DEM', id: 3452054 }
+          ]
+        },
+        {
+          name: '流域 BI (仮)', children: [
+            { name: '貯水池 ', id: 3421462 },
+            { name: '集水範囲 ', id: 3421437 },
+            { name: '音達区域', id: 3449851 },
+            { name: '境界線', id: 3308379 },
+            { name: '河川境界線等', id: 3308394 }
+          ]
+        },
+        {
+          name: '巡視・ダム設備 (仮)', children: [
+            { name: '九頭竜川巡視ルート ', id: 3463131 },
+            { name: '九頭竜川巡視点 ', id: 0 },
+            { name: '九頭竜川ダム放流警戒設備', id: 0 },
+            { name: '真名川巡視ルート', id: 3463133 },
+            { name: '真名川巡視点', id: 0 },
+            { name: '真名川ダム放流警戒設備', id: 0 },
+            { name: '警報局（場所特定・未特定）', children: [
+            { name: ' 1', id: null },
+            { name: ' 18', id: 3456029 }
+      ]
+    }
+  ]
+},
+        {
+          name: 'その他属性', children: [
+            { name: 'サブボトムプロファイラ（仮）', id: 3448241 },
+            { name: '堆積（仮）', id: 3448219 },
+            { name: '浸食（仮）', id: 3455648 },
+            { name: '崩壊（仮）', id: 0 },
+            { name: 'テスト', id: 3308391 }
+          ]
+        },
+        {
+          name: '水面', children: [
+            { name: '流量（例：平水時）', id: 3303831 },
+            { name: '流量（例：平均年）', id: 3296884 }
+          ]
+        }
+      ];
+
+
+      function createTree(container, nodes) {
+        nodes.forEach(node => {
+          const div = document.createElement('div');
+
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+
+        if (node.id && node.id !== 0) {
+  let loadedTileset = null;
+  checkbox.addEventListener('change', () => {
+    if (node.id === 3300958) {
+
+      if (pointCloudTileset) {
+        pointCloudTileset.show = checkbox.checked;
+      }
+    } else {
+      if (checkbox.checked) {
+        Cesium.IonResource.fromAssetId(node.id).then(resource => {
+          loadedTileset = new Cesium.Cesium3DTileset({ url: resource });
+          viewer.scene.primitives.add(loadedTileset);
+        });
+      } else if (loadedTileset) {
+        viewer.scene.primitives.remove(loadedTileset);
+        loadedTileset = null;
+      }
+    }
+  });
+}
+
+ else {
+            checkbox.disabled = true;
+          }
+
+          const label = document.createElement('span');
+          label.className = 'label';
+          label.textContent = node.name;
+
+
+          label.style.marginLeft = '6px';
+          label.style.cursor = 'pointer';
+
+          let url = null;
+          let title = node.name;
+
+
+          const mainModel = mainModels.find(m => m.id === node.id);
+          if (mainModel) {
+            url = mainModel.url;
+            title = mainModel.title + ' / ' + mainModel.detail;
+          } else if (node.id && node.id !== 0) {
+
+            url = null;
+          }
+
+          if (url) {
+            label.addEventListener('click', () => {
+              showPopup(title, url, mainModel?.detail || '');
+            });
+          }
+
+          div.appendChild(checkbox);
+          div.appendChild(label);
+
+          container.appendChild(div);
+
+if (node.children) {
+  label.classList.add('tree-parent');  // 親用スタイル
+
+  const childDiv = document.createElement('div');
+  childDiv.className = 'tree-children';  // 初期は非表示にする
+  div.appendChild(childDiv);
+
+  createTree(childDiv, node.children);
+
+  // ラベルクリックで子を開閉
+  label.addEventListener('click', () => {
+    childDiv.style.display = childDiv.style.display === 'none' ? 'block' : 'none';
+  });
+}
+
+        });
+      }
+
+      createTree(treeContainer, treeData);
+
+      document.getElementById('popupClose').addEventListener('click', () => {
+        hidePopup();
+      });
+    });
+  </script>
+
+<div id="mainTitle">九頭竜川CIM (デモ版）</div>
+<img id="clientLogo" src="https://www.ideacon.co.jp/common/images/logo_white.svg" alt="クライアントロゴ" />
+
+
+</body>
+</html>
+
+
+
+
+
